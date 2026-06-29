@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+
+  # ── Base de Datos MongoDB ──────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: llm_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: llm_pricing
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - llm_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── API FastAPI ────────────────────────────────────────────────────────────
+  api:
+    build: .
+    container_name: llm_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI: mongodb://mongodb:27017
+      MONGO_DB:  llm_pricing
+      MONGO_COL: modelos
+      CSV_PATH:  /app/datos/llm_price_performance_tracker_2026-03-31.csv
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    networks:
+      - llm_network
+
+  # ── Dashboard Streamlit ────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: llm_dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    networks:
+      - llm_network
+
+# ── Volúmenes y Red ────────────────────────────────────────────────────────
+volumes:
+  mongo_data:
+
+networks:
+  llm_network:
+    driver: bridge

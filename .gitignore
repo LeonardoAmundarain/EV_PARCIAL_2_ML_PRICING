@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data (archivo grande, solo subir el de 10k si quieres)
+# datos/*.csv   ← descomenta si no quieres subir el CSV
+
+# Modelos entrenados (son grandes, considera Git LFS)
+# models/trained_models/*.pkl  ← descomenta si no quieres subirlos
+
+# Docker
+.dockerignore
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# MongoDB local
+mongo_data/
+
+# Variables de entorno
+.env
+.env.local
