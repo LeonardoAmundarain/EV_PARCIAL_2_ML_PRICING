@@ -8,7 +8,10 @@ uvicorn[standard]>=0.29
 pymongo>=4.7
 pandas>=2.2
 numpy>=1.26
-scikit-learn>=1.4
+# scikit-learn FIJADO a 1.8.x: los modelos .pkl en models/trained_models/
+# fueron entrenados con 1.8.0. Una version distinta no puede deserializarlos
+# (error "No module named '_loss'"). No cambiar sin reentrenar los modelos.
+scikit-learn==1.8.0
 streamlit>=1.35
 plotly>=5.22
 requests>=2.32
