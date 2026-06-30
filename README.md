@@ -1,273 +1,322 @@
-# Evaluación Parcial N°2: Predicción de Pricing Tiers en Modelos LLM
+# LLM Price Performance — Solución End-to-End de Análisis de Datos
 
-**Asignatura:** SCY1101 - Programación para la Ciencia de Datos  
-**Evaluación:** Parcial 2 (30% nota final)  
-**Fecha:** Mayo 2026
-
----
-
-## Pregunta de Investigación
-
-¿Es posible predecir el nivel de precio (pricing_tier) de un modelo LLM basándose en sus capacidades técnicas, y qué variables determinan si un modelo ofrece valor excepcional o está simplemente sobrevalorado?
+**Asignatura:** SCY1101 — Programación para la Ciencia de Datos
+**Evaluación:** Parcial N°3 — Encargo con Presentación (40%)
+**Integrantes:** Leonardo Amundarain · Felipe Villalobos
 
 ---
 
-## Descripción General
+## 1. Descripción del proyecto
 
-Este proyecto implementa un pipeline completo de Machine Learning para:
+Solución completa de análisis de datos sobre el mercado de modelos de lenguaje (LLM), construida como un sistema **end-to-end** que integra múltiples fuentes de datos, las procesa mediante un pipeline ETL automatizado, las almacena en una base de datos NoSQL, las expone a través de una API REST y las visualiza en un dashboard interactivo. Todo el sistema está containerizado con Docker para garantizar su reproducibilidad.
 
-1. **Análisis Exploratorio:** Entender la estructura de datos y patrones iniciales.
-2. **Modelado Supervisado:** Predecir pricing_tier usando Random Forest y Gradient Boosting.
-3. **Evaluación Rigurosa:** Comparar modelos mediante múltiples métricas y validación cruzada.
-4. **Optimización:** Ajustar hiperparámetros mediante GridSearchCV.
-5. **Análisis Final:** Integrar clustering no supervisado y extraer conclusiones estratégicas.
+El proyecto responde a la pregunta: **¿es posible predecir el nivel de precio (pricing tier) de un modelo LLM a partir de sus capacidades técnicas, y qué variables determinan que un modelo ofrezca un valor excepcional o esté sobrevalorado?**
 
 ---
 
-## Dataset
-
-**Archivo:** `datos/llm_price_performance_tracker_20260331.csv`
-
-- **Tamaño:** 453 modelos LLM, 34 variables
-- **Período:** 2023-2026
-- **Proveedores:** OpenAI, Google, Anthropic, Meta, Mistral, y otros
-- **Variables clave:**
-  - Benchmarks técnicos: inteligencia, programación, matemática
-  - Costos: entrada, salida (por millón de tokens)
-  - Velocidad: tokens por segundo, tiempo a primer token
-  - Metadatos: proveedor, año de lanzamiento, open source
-  - **Target:** pricing_tier (Budget, Mid, Premium, Ultra, Free, Unknown)
-
----
-
-## Estructura del Proyecto
+## 2. Arquitectura del sistema
 
 ```
-proyecto_modelado/
-├── notebooks/
-│   ├── 01_exploratory_analysis.ipynb
-│   ├── 02_supervised_modeling.ipynb
-│   ├── 03_model_evaluation.ipynb
-│   ├── 04_hyperparameter_optimization.ipynb
-│   └── 05_final_analysis.ipynb
-├── src/
+┌──────────────┐      ┌─────────────────┐      ┌──────────────┐      ┌──────────────┐
+│   FUENTES    │      │   PIPELINE ETL  │      │   MONGODB    │      │   API REST   │
+│              │      │                 │      │    ATLAS     │      │  (FastAPI)   │
+│ 1. CSV local │─────▶│ Extract         │─────▶│              │◀────▶│              │
+│ 2. API Banco │      │ Transform       │      │ 10.000 docs  │      │ 11 endpoints │
+│    Central   │      │ (validación +   │      │ colección    │      │ /docs Swagger│
+│ 3. MongoDB   │      │  enriquecimiento│      │ "modelos"    │      │              │
+│              │      │  USD→CLP)       │      │              │      │              │
+│              │      │ Load            │      │              │      │              │
+└──────────────┘      └─────────────────┘      └──────────────┘      └──────┬───────┘
+                                                                            │
+                                                                            ▼
+                                                                   ┌──────────────┐
+                                                                   │  DASHBOARD   │
+                                                                   │ (Streamlit + │
+                                                                   │   Plotly)    │
+                                                                   │  6 secciones │
+                                                                   └──────────────┘
+
+         Todo el sistema (API + Dashboard) se orquesta con Docker Compose.
+```
+
+**Flujo de datos:** el pipeline ETL extrae el dataset desde un CSV, lo enriquece con el tipo de cambio USD/CLP consultado en vivo a la API del Banco Central de Chile, valida el esquema, y carga el resultado en MongoDB Atlas. La API REST lee desde MongoDB y sirve los datos al dashboard, que también consume el modelo de Machine Learning para predecir el pricing tier.
+
+---
+
+## 3. Componentes y estructura del repositorio
+
+```
+EV_PARCIAL_2_ML_PRICING/
+├── etl/                      # Pipeline ETL (Extract-Transform-Load)
+│   ├── pipeline.py           # Orquestador del pipeline completo
+│   ├── extract_indicador.py  # Fuente externa: API del Banco Central (USD/CLP)
+│   └── validate_schema.py    # Validación de esquema del dataset
+├── api/                      # API REST (FastAPI)
+│   ├── main.py               # Definición de endpoints
+│   └── database.py           # Conexión y operaciones con MongoDB
+├── dashboard/                # Dashboard interactivo (Streamlit + Plotly)
+│   └── app.py                # 6 secciones de visualización
+├── src/                      # Módulos de Machine Learning
 │   ├── data_preprocessing.py
 │   ├── model_training.py
 │   ├── model_evaluation.py
 │   └── hyperparameter_tuning.py
-├── datos/
-│   └── llm_price_performance_tracker_20260331.csv
-├── models/
-│   └── trained_models/
-│       ├── rf_optimizado.pkl
-│       ├── gb_optimizado.pkl
-│       └── scaler.pkl
-├── results/
-│   ├── metrics/
-│   ├── plots/
-│   └── reports/
+├── models/trained_models/    # Modelos serializados (.pkl)
+│   ├── rf_optimizado.pkl     # Random Forest optimizado
+│   ├── gb_optimizado.pkl     # Gradient Boosting optimizado
+│   └── scaler.pkl            # StandardScaler ajustado
+├── notebooks/                # 10 notebooks de análisis y modelado
+├── tests/                    # Pruebas unitarias (pytest)
+│   ├── conftest.py           # Fixtures y mocks de MongoDB y ML
+│   ├── test_health.py
+│   ├── test_modelos.py
+│   ├── test_stats.py
+│   └── test_prediccion.py
+├── datos/                    # Dataset original (CSV)
+├── results/                  # Gráficos e informe técnico
+├── Dockerfile                # Imagen de la API
+├── Dockerfile.dashboard      # Imagen del dashboard
+├── docker-compose.yml        # Orquestación de los servicios
+├── requirements.txt          # Dependencias del proyecto
+├── pytest.ini                # Configuración de pruebas
+├── .env.example              # Plantilla de variables de entorno
 └── README.md
 ```
 
 ---
 
-## Notebooks: Guía de Ejecución
+## 4. Pipeline ETL
 
-### 01_exploratory_analysis.ipynb
-**Duración:** ~10 minutos
+El pipeline (`etl/pipeline.py`) integra **tres fuentes de datos distintas**, cumpliendo el requisito de la evaluación:
 
-Análisis exploratorio de datos:
-- Carga e inspección del dataset
-- Distribución de variables objetivo y features
-- Relaciones entre benchmarks técnicos y pricing_tier
-- Análisis por proveedor
-- Matriz de correlación
-- Identificación de nulos
+| #   | Fuente                                               | Tipo                | Detalle                                           |
+| --- | ---------------------------------------------------- | ------------------- | ------------------------------------------------- |
+| 1   | `datos/llm_price_performance_tracker_2026-03-31.csv` | Archivo CSV         | Dataset base con ~10.000 modelos LLM              |
+| 2   | API REST `mindicador.cl`                             | API externa         | Tipo de cambio USD/CLP del Banco Central de Chile |
+| 3   | MongoDB Atlas                                        | Base de datos NoSQL | Destino de carga y fuente de lectura              |
 
-**Salida:** Visualizaciones en `results/plots/`
+**Etapas:**
 
----
+- **Extract:** lee el CSV y consulta en vivo el dólar observado. La consulta a la API externa implementa _timeout_, _reintentos_ y un valor de _fallback_ documentado si la fuente no responde.
+- **Transform:** valida el esquema del dataset (columnas obligatorias, tipos, rangos y tiers válidos), descarta filas inválidas y **enriquece** los datos agregando columnas de precio convertido a CLP (`blended_cost_clp_per_1m`, `input_cost_clp_per_1m`, `output_cost_clp_per_1m`) más metadatos de trazabilidad (`etl_processed_at`, `fuente_tipo_cambio`).
+- **Load:** inserta en MongoDB Atlas en lotes, con manejo de errores e idempotencia (no recarga si la colección ya tiene datos, salvo que se fuerce).
 
-### 02_supervised_modeling.ipynb
-**Duración:** ~15 minutos
+El pipeline registra toda su ejecución mediante _logging_ profesional, tanto en consola como en archivo (`logs/etl_pipeline.log`).
 
-Entrenamiento de modelos de clasificación:
-- Preprocesamiento completo
-- Escalado StandardScaler
-- Random Forest (100 árboles)
-- Gradient Boosting (100 estimadores)
-- Importancia de features
-- Matrices de confusión
+### Ejecutar el pipeline
 
-**Salida:** Modelos base entrenados
-
----
-
-### 03_model_evaluation.ipynb
-**Duración:** ~5 minutos
-
-Evaluación rigurosa:
-- Métricas por clase
-- Validación cruzada 5-fold
-- Comparación RF vs GB
-- Matrices de confusión detalladas
-
-**Salida:** Reportes de evaluación
-
----
-
-### 04_hyperparameter_optimization.ipynb
-**Duración:** ~30-40 minutos
-
-Optimización de hiperparámetros:
-- GridSearchCV para Random Forest (108 combinaciones)
-- GridSearchCV para Gradient Boosting (81 combinaciones)
-- Comparación base vs optimizado
-- Serialización de modelos
-
-**Salida:** Modelos optimizados en `models/trained_models/`
-
----
-
-### 05_final_analysis.ipynb
-**Duración:** ~10 minutos
-
-Análisis integral:
-- K-Means Clustering
-- Método del Codo y Silhouette Score
-- Visualización PCA
-- Modelos subvaluados vs sobrevalorados
-- Conclusiones finales
-- Recomendaciones estratégicas
-
-**Salida:** Conclusiones y visualizaciones
-
----
-
-## Módulos Python (src/)
-
-### data_preprocessing.py
-Funciones para limpieza y preparación de datos:
-- `cargar_dataset(ruta)` - Carga CSV
-- `imputar_nulos_por_proveedor(df, columnas)` - Imputación estratégica
-- `asignar_costo_open_source(df)` - Costo 0 para modelos gratuitos
-- `crear_features_derivadas(df)` - Ratios como inteligencia/dólar
-- `seleccionar_features(df, features, target)` - Preparación X, y
-- `escalar_features(X, scaler)` - StandardScaler
-- `procesar_dataset_completo(...)` - Pipeline integrado
-
-### model_training.py
-Funciones para entrenamiento:
-- `dividir_datos(X, y, test_size)` - Train/test split estratificado
-- `entrenar_random_forest(...)` - RF con parámetros personalizables
-- `entrenar_gradient_boosting(...)` - GB con parámetros personalizables
-- `validacion_cruzada(modelo, X, y, cv)` - 5-fold CV
-- `obtener_importancia_features(modelo, feature_names)` - Feature importance
-
-### model_evaluation.py
-Funciones para evaluación:
-- `calcular_metricas(y_true, y_pred)` - Accuracy, Precision, Recall, F1
-- `obtener_confusion_matrix(y_true, y_pred)` - Matriz de confusión
-- `obtener_reporte_clasificacion(y_true, y_pred)` - Reporte por clase
-- `comparar_modelos(modelos_dict, X_test, y_test)` - Comparación múltiple
-- `diagnosticar_overfitting(train_score, test_score)` - Detección de overfitting
-
-### hyperparameter_tuning.py
-Funciones para optimización:
-- `parametros_random_forest()` - Grid para RF
-- `parametros_gradient_boosting()` - Grid para GB
-- `ejecutar_grid_search_rf(...)` - GridSearchCV para RF
-- `ejecutar_grid_search_gb(...)` - GridSearchCV para GB
-- `analizar_resultados_grid_search(...)` - Análisis de resultados
-- `extraer_modelo_optimizado(grid_search)` - Obtener mejor modelo
-
----
-
-## Requisitos Técnicos
-
-### Librerías
-```
-pandas>=1.0.0
-numpy>=1.18.0
-scikit-learn>=0.24.0
-matplotlib>=3.0.0
-seaborn>=0.11.0
-```
-
-### Instalación
 ```bash
-pip install pandas numpy scikit-learn matplotlib seaborn
+# Carga normal (omite si la base ya tiene datos)
+python -m etl.pipeline
+
+# Recarga forzada completa
+python -m etl.pipeline --forzar
 ```
 
-### Python
-Python 3.8 o superior
+> **Nota:** el pipeline escribe su log en `logs/etl_pipeline.log`. Si la carpeta `logs/` no existe, créala antes con `mkdir logs` (en Windows: `mkdir logs`).
 
 ---
 
-## Ejecución
+## 5. API REST (FastAPI)
 
-### Opción 1: Jupyter
+La API (`api/main.py`) expone **11 endpoints** documentados automáticamente con Swagger en `http://localhost:8000/docs`.
+
+| Método | Endpoint                  | Descripción                                                                |
+| ------ | ------------------------- | -------------------------------------------------------------------------- |
+| GET    | `/`                       | Estado de la API y lista de endpoints                                      |
+| GET    | `/health`                 | Salud del servicio, conteo de modelos en BD y modelos ML cargados          |
+| GET    | `/modelos`                | Lista modelos con filtros (provider, tier, open source) y paginación       |
+| GET    | `/modelos/{model_slug}`   | Detalle de un modelo por su slug                                           |
+| GET    | `/stats`                  | Estadísticas globales del dataset                                          |
+| GET    | `/stats/benchmarks`       | Benchmarks promedio agrupados por pricing tier                             |
+| GET    | `/providers`              | Estadísticas agregadas por proveedor                                       |
+| GET    | `/top-valor`              | Top N modelos por relación inteligencia/dólar                              |
+| GET    | `/top-inteligencia`       | Top N modelos por índice de inteligencia                                   |
+| POST   | `/prediccion`             | Predice el pricing tier de un modelo con Random Forest y Gradient Boosting |
+| GET    | `/prediccion/tier/{tier}` | Compara tier real vs predicho para un conjunto de modelos                  |
+
+### Ejemplo de predicción (POST /prediccion)
+
+Cuerpo de la petición:
+
+```json
+{
+  "aa_intelligence_index": 33.0,
+  "aa_coding_index": 22.0,
+  "aa_math_index": 20.0,
+  "input_cost_usd_per_1m": 2.0,
+  "output_cost_usd_per_1m": 8.0,
+  "output_tokens_per_second": 80.0,
+  "time_to_first_token_s": 1.5,
+  "chatbot_arena_elo": 1150.0,
+  "release_year": 2025.0
+}
+```
+
+Respuesta:
+
+```json
+{
+  "prediccion_rf": "Budget",
+  "prediccion_gb": "Budget",
+  "consenso": "Budget",
+  "confianza_rf": {
+    "Budget": 0.287,
+    "Free": 0.273,
+    "Mid": 0.219,
+    "Ultra": 0.132,
+    "Premium": 0.089
+  }
+}
+```
+
+---
+
+## 6. Dashboard interactivo (Streamlit + Plotly)
+
+El dashboard (`dashboard/app.py`) consume la API y ofrece **6 secciones** con visualizaciones diferenciadas según la audiencia:
+
+1. **Resumen General** — KPIs, distribución por tier, top providers (visión ejecutiva).
+2. **Ranking de Modelos** — mejor valor (inteligencia/dólar) y modelos más inteligentes.
+3. **Análisis de Precios** — distribución de costos por tier, inteligencia vs costo.
+4. **Benchmarks Técnicos** — heatmap y comparación de capacidades por tier (visión técnica).
+5. **Explorador de Modelos** — filtros y scatter interactivo configurable.
+6. **Predictor de Tier ML** — predicción en vivo del pricing tier con gráfico de confianza.
+
+---
+
+## 7. Instalación y configuración
+
+### Requisitos previos
+
+- Python 3.13 (recomendado; compatible con 3.11–3.14)
+- Docker y Docker Compose (para el despliegue containerizado)
+- Acceso a una instancia de MongoDB (Atlas o local)
+
+### Variables de entorno
+
+Copia la plantilla y completa tus credenciales:
+
 ```bash
-jupyter notebook
+copy .env.example .env      # Windows
+# cp .env.example .env      # Linux/Mac
 ```
-Abre cada notebook de 01 a 05 y ejecuta celda por celda.
 
-### Tiempo Total
-- Secciones 1-3: ~30 minutos
-- Sección 4 (GridSearch): ~40 minutos
-- Sección 5: ~10 minutos
-- **TOTAL: 80-90 minutos**
+Edita `.env` con tu cadena de conexión:
 
----
+```
+MONGO_URI=mongodb+srv://USUARIO:PASSWORD@CLUSTER.mongodb.net/?appName=llm-cluster
+MONGO_DB=llm_pricing
+MONGO_COL=modelos
+CSV_PATH=/app/datos/llm_price_performance_tracker_2026-03-31.csv
+```
 
-## Métricas Principales
+> El archivo `.env` está excluido del repositorio (`.gitignore`) para no exponer credenciales.
 
-### Supervisado
-- Accuracy, Precision, Recall, F1-Score
-- Validación cruzada 5-fold
-- Matrices de confusión
+### Entorno local (sin Docker)
 
-### No Supervisado
-- Silhouette Score (separación de clusters)
-- Método del Codo (k óptimo)
+```bash
+python -m venv .venv
+.venv\Scripts\activate           # Windows
+# source .venv/bin/activate      # Linux/Mac
 
----
+python -m pip install -r requirements.txt
+```
 
-## Resultados Esperados
-
-- **Accuracy base:** 80-82%
-- **Accuracy optimizado:** 82-85%
-- **Arquetipos descubiertos:** 3-5 clusters distintos
-- **Oportunidades:** Modelos subvaluados identificados
+> **Importante:** `scikit-learn` está fijado en la versión `1.8.0` porque los modelos `.pkl` fueron entrenados con esa versión. Usar otra versión impide deserializarlos.
 
 ---
 
-## Conceptos Clave
+## 8. Ejecución
 
-**Validación Cruzada:** División en k pliegues para evaluación robusta.
+### Opción A — Docker (recomendada)
 
-**Overfitting:** Cuando train accuracy >> test accuracy. Se controla con límites de profundidad.
+Levanta la API y el dashboard con un solo comando:
 
-**Escalado:** StandardScaler normaliza features a media 0 y std 1.
+```bash
+docker-compose up --build
+```
 
-**GridSearchCV:** Búsqueda exhaustiva de hiperparámetros con CV.
+- API: `http://localhost:8000` (documentación en `/docs`)
+- Dashboard: `http://localhost:8501`
+
+### Opción B — Manual (dos terminales)
+
+**Terminal 1 — API:**
+
+```bash
+uvicorn api.main:app
+```
+
+**Terminal 2 — Dashboard:**
+
+```bash
+streamlit run dashboard/app.py
+```
+
+Verifica que la API imprima `✓ Modelos ML cargados correctamente` al iniciar.
 
 ---
 
-## Reproducibilidad
+## 9. Pruebas (testing)
 
-Todos los modelos usan `random_state=42` para resultados consistentes.
+El proyecto incluye una suite de **pruebas unitarias** sobre la API, ubicada en `tests/`. Las pruebas mockean MongoDB y los modelos ML, por lo que se ejecutan de forma aislada y reproducible **sin necesidad de levantar la base de datos ni Docker**.
+
+```bash
+python -m pytest
+```
+
+Cobertura de las pruebas:
+
+| Archivo              | Qué prueba                                                 |
+| -------------------- | ---------------------------------------------------------- |
+| `test_health.py`     | Endpoints de salud (`/`, `/health`)                        |
+| `test_modelos.py`    | Listado, filtros, paginación y manejo de 404               |
+| `test_stats.py`      | Estadísticas y ranking por valor                           |
+| `test_prediccion.py` | Predicción ML, forma de la respuesta y manejo de error 503 |
 
 ---
 
-## Referencias
+## 10. Containerización (Docker)
 
-- Scikit-learn: https://scikit-learn.org/
-- Pandas: https://pandas.pydata.org/
-- NumPy: https://numpy.org/
-- Matplotlib: https://matplotlib.org/
-- Seaborn: https://seaborn.pydata.org/
+El sistema se compone de dos imágenes orquestadas por `docker-compose.yml`:
+
+- **`Dockerfile`** → construye la imagen de la API (FastAPI + Uvicorn, puerto 8000).
+- **`Dockerfile.dashboard`** → construye la imagen del dashboard (Streamlit, puerto 8501).
+
+La configuración se inyecta por variables de entorno (`MONGO_URI`, `API_URL`), siguiendo buenas prácticas de configuración externa. El dashboard declara una dependencia sobre la API (`depends_on`).
 
 ---
 
-**Mayo 2026**
+## 11. Dataset
+
+**Archivo:** `datos/llm_price_performance_tracker_2026-03-31.csv`
+
+- ~10.000 modelos LLM almacenados en MongoDB tras el ETL
+- Proveedores: OpenAI, Google, Anthropic, Meta, Mistral, entre otros
+- Variables: benchmarks técnicos (inteligencia, coding, math), costos (entrada/salida/blended en USD y CLP), velocidad, metadatos
+- **Target:** `pricing_tier` (Budget, Mid, Premium, Ultra, Free, Unknown)
+
+---
+
+## 12. Modelos de Machine Learning
+
+- **Random Forest** y **Gradient Boosting**, optimizados con GridSearchCV.
+- Preprocesamiento con `StandardScaler` (serializado junto a los modelos).
+- Reproducibilidad garantizada con `random_state=42`.
+- Detalle completo del proceso de modelado en los notebooks (`notebooks/`) y en el informe técnico (`results/reports/`).
+
+---
+
+## 13. Tecnologías
+
+| Capa             | Tecnología                |
+| ---------------- | ------------------------- |
+| Lenguaje         | Python 3.13               |
+| ETL              | pandas, requests, pymongo |
+| Base de datos    | MongoDB Atlas             |
+| API              | FastAPI, Uvicorn          |
+| Dashboard        | Streamlit, Plotly         |
+| Machine Learning | scikit-learn              |
+| Testing          | pytest, httpx             |
+| Containerización | Docker, Docker Compose    |
