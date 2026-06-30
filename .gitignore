@@ -43,3 +43,7 @@ mongo_data/
 # Variables de entorno
 .env
 .env.local
+
+# Logs (subir la carpeta vacía con .gitkeep, pero ignorar los .log generados)
+logs/*.log
+!logs/.gitkeep
