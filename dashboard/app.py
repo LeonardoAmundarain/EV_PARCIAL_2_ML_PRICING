@@ -394,27 +394,61 @@ elif pagina == "🤖 Predictor de Tier ML":
             "release_year":          float(year),
             "cost_avg":              (inp_cost + out_cost) / 2
         }
+
+        st.markdown("---")
+        st.subheader("Resultado de la predicción")
+
+        # 1) Llamada a la API con manejo de conexión
         try:
-            r   = requests.post(f"{API_URL}/prediccion", json=payload, timeout=10)
+            r = requests.post(f"{API_URL}/prediccion", json=payload, timeout=15)
+        except requests.exceptions.RequestException as e:
+            st.error(
+                f"No se pudo conectar con la API en {API_URL}. "
+                f"Verifica que esté corriendo (uvicorn o docker-compose). Detalle: {e}"
+            )
+            st.stop()
+
+        # 2) Verificar el código de estado HTTP antes de procesar
+        if r.status_code != 200:
+            try:
+                detalle = r.json().get("detail", r.text)
+            except Exception:
+                detalle = r.text
+            st.error(f"La API respondió con error {r.status_code}: {detalle}")
+            if r.status_code == 503:
+                st.info(
+                    "El error 503 indica que los modelos ML no se cargaron en la API. "
+                    "Revisa que existan los archivos .pkl en models/trained_models/ "
+                    "y reinicia la API."
+                )
+            st.stop()
+
+        # 3) Procesar la respuesta exitosa
+        try:
             res = r.json()
-
-            st.markdown("---")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("🌲 Random Forest", res.get("prediccion_rf","—"))
-            c2.metric("🚀 Gradient Boosting", res.get("prediccion_gb","—"))
-            c3.metric("🤝 Consenso", res.get("consenso","—"))
-
-            # Gráfico de confianza
-            confianza = res.get("confianza_rf", {})
-            if confianza:
-                df_conf = pd.DataFrame(list(confianza.items()), columns=["Tier","Probabilidad"])
-                df_conf = df_conf.sort_values("Probabilidad", ascending=True)
-                fig = px.bar(df_conf, x="Probabilidad", y="Tier", orientation="h",
-                             color="Probabilidad", color_continuous_scale="blues",
-                             title="Probabilidad por Tier (Random Forest)",
-                             text=df_conf["Probabilidad"].apply(lambda x: f"{x:.1%}"))
-                fig.update_traces(textposition="outside")
-                fig.update_layout(coloraxis_showscale=False)
-                st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
-            st.error(f"Error al predecir: {e}")
+            st.error(f"La API no devolvió un JSON válido: {e}")
+            st.stop()
+
+        # Métricas principales
+        m1, m2, m3 = st.columns(3)
+        m1.metric("🌲 Random Forest", res.get("prediccion_rf", "—"))
+        m2.metric("🚀 Gradient Boosting", res.get("prediccion_gb", "—"))
+        m3.metric("🤝 Consenso", res.get("consenso", "—"))
+
+        # Gráfico de confianza
+        confianza = res.get("confianza_rf", {})
+        if confianza:
+            df_conf = pd.DataFrame(list(confianza.items()), columns=["Tier", "Probabilidad"])
+            df_conf = df_conf.sort_values("Probabilidad", ascending=True)
+            fig = px.bar(
+                df_conf, x="Probabilidad", y="Tier", orientation="h",
+                color="Probabilidad", color_continuous_scale="blues",
+                title="Probabilidad por Tier (Random Forest)",
+                text=df_conf["Probabilidad"].apply(lambda x: f"{x:.1%}")
+            )
+            fig.update_traces(textposition="outside")
+            fig.update_layout(coloraxis_showscale=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("La predicción se realizó pero la API no devolvió probabilidades por tier.")

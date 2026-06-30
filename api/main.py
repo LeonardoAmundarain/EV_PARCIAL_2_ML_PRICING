@@ -31,14 +31,29 @@ def cargar_modelos():
 
 modelos_ml = {}
 
+def cargar_modelos_en_memoria():
+    """
+    Carga los modelos en el diccionario global `modelos_ml` SIN reasignarlo.
+
+    Es importante usar .clear() + .update() en lugar de `modelos_ml = ...`
+    porque los endpoints importan una referencia al diccionario al definirse.
+    Si se reasignara la variable, los endpoints seguirían apuntando al
+    diccionario vacío original y la API respondería 503 aunque los modelos
+    sí se hayan cargado.
+    """
+    cargados = cargar_modelos()
+    modelos_ml.clear()
+    modelos_ml.update(cargados)
+    print(f"→ modelos_ml ahora contiene: {list(modelos_ml.keys())}")
+    return modelos_ml
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    global modelos_ml
     print(" Iniciando API...")
     conectar_mongo()
     cargar_dataset_a_mongo()
-    modelos_ml = cargar_modelos()
+    cargar_modelos_en_memoria()
     yield
     # Shutdown
     print(" Cerrando API...")
