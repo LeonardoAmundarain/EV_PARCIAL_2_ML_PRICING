@@ -1,7 +1,7 @@
 """
 etl/extract_indicador.py
 Extracción desde fuente externa: API REST mindicador.cl (Banco Central de Chile)
-Tercera fuente de datos del pipeline ETL (CSV -> MongoDB -> API externa).
+Tercera fuente de datos del pipeline ETL (CSV -> MongoDB -> API externa)
 
 Documentación oficial: https://mindicador.cl/api
 No requiere autenticación ni API key.
