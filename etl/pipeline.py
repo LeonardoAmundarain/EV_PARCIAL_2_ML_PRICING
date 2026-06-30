@@ -27,7 +27,7 @@ from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(__file__))
 from extract_indicador import obtener_dolar_observado, convertir_usd_a_clp
-from etl.validate_schema import validar_y_limpiar_dataset
+from validate_schema import validar_y_limpiar_dataset
 
 load_dotenv()
 
